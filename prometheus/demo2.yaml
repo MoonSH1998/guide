@@ -1,22 +1,35 @@
+---
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Secret
 metadata:
-  name: mysql-pvc
-  namespace: default
+  name: mysql-secret
+  namespace: cattle-monitoring-system
+type: Opaque
+data:
+  # password is 'admin123' encoded in base64
+  MYSQL_ROOT_PASSWORD: YWRtaW4xMjM=
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: cattle-monitoring-system
+  labels:
+    app: mysql
 spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql
+  selector:
+    app: mysql
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
-  namespace: default
+  namespace: cattle-monitoring-system
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: mysql
@@ -26,38 +39,74 @@ spec:
         app: mysql
     spec:
       containers:
-      - name: mysql
-        image: mysql:8.0
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: rootpassword
-        - name: MYSQL_DATABASE
-          value: testdb
-        - name: MYSQL_USER
-          value: testuser
-        - name: MYSQL_PASSWORD
-          value: testpassword
-        ports:
-        - containerPort: 3306
-          name: mysql
-        volumeMounts:
-        - name: mysql-data
-          mountPath: /var/lib/mysql
-      volumes:
-      - name: mysql-data
-        persistentVolumeClaim:
-          claimName: mysql-pvc
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql
-  namespace: default
+  name: mysql-exporter
+  namespace: cattle-monitoring-system
+  labels:
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: mysql-exporter
 spec:
   ports:
-  - port: 3306
-    targetPort: 3306
+    - port: 9104
+      targetPort: 9104
+      name: metrics
   selector:
-    app: mysql
-  type: ClusterIP
-
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: mysql-exporter
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-exporter
+  namespace: cattle-monitoring-system
+  labels:
+    app.kubernetes.io/name: prometheus-mysql-exporter
+    app.kubernetes.io/instance: mysql-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-mysql-exporter
+      app.kubernetes.io/instance: mysql-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prometheus-mysql-exporter
+        app.kubernetes.io/instance: mysql-exporter
+    spec:
+      containers:
+        - name: mysql-exporter
+          image: prom/mysqld-exporter:v0.14.0
+          ports:
+            - containerPort: 9104
+              name: metrics
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "root:admin123@(mysql:3306)/"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
