@@ -1,28 +1,29 @@
-helm install mysql-exporter Prometheus-community/Prometheus-mysql-exporter \
-  --namespace monitoring \
+helm install mysql-exporter prometheus-community/prometheus-mysql-exporter \
+  --namespace cattle-monitoring-system \
   --set mysql.user=root \
   --set mysql.pass=rootpassword \
-  --set mysql.host=mysql \
+  --set mysql.host=mysql.default.svc.cluster.local \
   --set mysql.port=3306
 
-kubectl apply -f - <<EOF
+kubectl apply -f - <<EOF 
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: mysql-servicemonitor
-  namespace: monitoring # Prometheus Operator가 관리하는 네임스페이스
+  namespace: cattle-monitoring-system
   labels:
-    release: prometheus # Prometheus 리소스의 Label과 일치해야 합니다.
+    release: rancher-monitoring-operator # Prometheus Operator의 인스턴스 이름과 일치해야 함
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/instance: mysql-exporter # MySQL Exporter와 Label이 일치해야 합니다.
-      app.kubernetes.io/name: prometheus-mysql-exporter # MySQL Exporter 서비스의 Label과 일치해야 합니다.
-  endpoints:
-    - port: mysql-exporter # MySQL Exporter 서비스의 메트릭 포트
-      interval: 30s
-      path: /metrics
+      app.kubernetes.io/instance: mysql-exporter # Helm 설치 시 생성된 Exporter의 Label
+      app.kubernetes.io/name: prometheus-mysql-exporter # Helm Chart 이름
   namespaceSelector:
     matchNames:
-      - monitoring # MySQL Exporter 서비스가 위치한 네임스페이스
+      - cattle-monitoring-system
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+
 EOF
