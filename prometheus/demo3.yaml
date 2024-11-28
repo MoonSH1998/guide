@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nginx-rule
+  namespace: cattle-monitoring-system
+  labels:
+    prometheus: rancher-monitoring
+    role: alert-rules
+spec:
+  groups:
+  - name: nginx-rules
+    rules:
+    - alert: InstanceDown
+      annotations:
+        description: "Instance {{ $labels.instance }} is down."
+        summary: "Instance {{ $labels.instance }} is down for more than 1 minute."
+      expr: up{job="nginx-746c94bcf-5wrfz"} == 0
+      for: 1m
+      labels:
+        severity: warning
+
