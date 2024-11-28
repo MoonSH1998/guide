@@ -1,21 +1,68 @@
+---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: nginx-rule
+  name: pod-termination-alert
   namespace: cattle-monitoring-system
   labels:
-    prometheus: rancher-monitoring
-    role: alert-rules
+    release: rancher-monitoring
 spec:
   groups:
-  - name: nginx-rules
+  - name: pod.rules
     rules:
-    - alert: InstanceDown
-      annotations:
-        description: "Instance {{ $labels.instance }} of job 'nginx' is down."
-        summary: "Instance of job 'nginx' is down for more than 1 minute."
-      expr: up{job="nginx"} == 0
+    - alert: PodTerminated
+      expr: |
+        absent(kube_pod_status_ready{condition="true", namespace="test-monitoring", pod=~"test-pod.*"}) == 1
       for: 1m
       labels:
         severity: warning
-
+      annotations:
+        summary: "Pod {{ $labels.pod }} has been terminated"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been terminated for more than 1 minute"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-pod
+  namespace: test-monitoring
+  labels:
+    app: test-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-pod
+  template:
+    metadata:
+      labels:
+        app: test-pod
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-pod
+  namespace: test-monitoring
+spec:
+  selector:
+    app: test-pod
+  ports:
+  - port: 80
+    targetPort: 80
