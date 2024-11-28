@@ -12,9 +12,9 @@ spec:
     rules:
     - alert: InstanceDown
       annotations:
-        description: "Instance {{ $labels.instance }} is down."
-        summary: "Instance {{ $labels.instance }} is down for more than 1 minute."
-      expr: up{job="nginx-746c94bcf-5wrfz"} == 0
+        description: "Instance {{ $labels.instance }} of job 'nginx' is down."
+        summary: "Instance of job 'nginx' is down for more than 1 minute."
+      expr: up{job="nginx"} == 0
       for: 1m
       labels:
         severity: warning
